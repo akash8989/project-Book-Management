@@ -1,122 +1,166 @@
-const jwt = require("jsonwebtoken");
-const userModel = require("../models/userModel");
+const validate = require("../validation/validator")
+const userModel = require("../models/userModel")
 
-const createUser = async function (abcd, xyz) {
-  //You can name the req, res objects anything.
-  //but the first parameter is always the request 
-  //the second parameter is always the response
-  let data = abcd.body;
-  let savedData = await userModel.create(data);
-  console.log(abcd.newAtribute);
-  xyz.send({ msg: savedData });
-};
+const jwt = require('jsonwebtoken')
 
-const loginUser = async function (req, res) {
-  let userName = req.body.emailId;
-  let password = req.body.password;
 
-  let user = await userModel.findOne({ emailId: userName, password: password });
-  if (!user)
-    return res.send({
-      status: false,
-      msg: "username or the password is not corerct",
-    });
 
-  // Once the login is successful, create the jwt token with sign function
-  // Sign function has 2 inputs:
-  // Input 1 is the payload or the object containing data to be set in token
-  // The decision about what data to put in token depends on the business requirement
-  // Input 2 is the secret
-  // The same secret will be used to decode tokens
-  let token = jwt.sign(
-    {
-      userId: user._id.toString(),
-      batch: "thorium",
-      organisation: "FUnctionUp",
-    },
-    "functionup-thorium"
-  );
-  res.setHeader("x-auth-token", token);
-  res.send({ status: true, data: token });
-};
 
-const getUserData = async function (req, res) {
-  let token = req.headers["x-Auth-token"];
-  if (!token) token = req.headers["x-auth-token"];
 
-  //If no token is present in the request header return error
-  if (!token) return res.send({ status: false, msg: "token must be present" });
+// api fpr create user
 
-  console.log(token);
-  
-  // If a token is present then decode the token with verify function
-  // verify takes two inputs:
-  // Input 1 is the token to be decoded
-  // Input 2 is the same secret with which the token was generated
-  // Check the value of the decoded token yourself
-  let decodedToken = jwt.verify(token, "functionup-thorium");
-  if (!decodedToken)
-    return res.send({ status: false, msg: "token is invalid" });
+const createUser = async function (req, res) {
 
-  let userId = req.params.userId;
-  let userDetails = await userModel.findById(userId);
-  if (!userDetails)
-    return res.send({ status: false, msg: "No such user exists" });
+  try {
+    const requestBody = req.body;
 
-  res.send({ status: true, data: userDetails });
-};
+    const { title, name, phone, email, password, address } = requestBody
+    if (!validate.isValidRequestBody(requestBody)) {
+      res.status(400).send({ status: false, message: 'Invalid request parameters. Please provide author details' })
+      return
+    }
 
-const updateUser = async function (req, res) {
-// Do the same steps here:
-// Check if the token is present
-// Check if the token present is a valid token
-// Return a different error message in both these cases
+    if (!validate.isValid(title)) {
+      res.status(400).send({ status: false, message: 'Title is required' })
+      return
+    }
 
-  let userId = req.params.userId;
-  let user = await userModel.findById(userId);
-  //Return an error if no user with the given id exists in the db
-  if (!user) {
-    return res.send("No such user exists");
+    if (!validate.isValidTitle(title)) {
+      res.status(400).send({ status: false, message: `Title should be among Mr, Mrs, Miss` })
+      return
+    }
+
+    if (!validate.isValid(name)) {
+      res.status(400).send({ status: false, message: `name is required` })
+      return
+    }
+
+    if (typeof (name) != 'string') {
+      return res.status(400).send({ status: false, message: "Numbers are not allowed" })
+    }
+
+    if (!validate.isValid(phone)) {
+      res.status(400).send({ status: false, message: `phone no. is required` })
+      return
+    }
+
+    if (!validate.validatePhone(phone)) {
+      res.status(400).send({ status: false, message: `phone should be a valid number` });
+      return;
+    }
+
+    const isPhoneNumberAlreadyUsed = await userModel.findOne({ phone: phone });
+    if (isPhoneNumberAlreadyUsed) {
+      res.status(400).send({ status: false, message: `phone mobile number is already registered`, });
+      return;
+    }
+
+    if (!validate.isValid(email)) {
+      res.status(400).send({ status: false, message: `Email is required` })
+      return
+    }
+    if (!validate.validateEmail(email)) {
+      res.status(400).send({ status: false, message: `Email should be a valid email address` })
+      return
+    }
+    const isEmailAlreadyUsed = await userModel.findOne({ email }); 
+
+    if (isEmailAlreadyUsed) {
+      res.status(400).send({ status: false, message: `email email address is already registered` })
+      return
+    }
+
+    if (!validate.isValid(password)) {
+      res.status(400).send({ status: false, message: `Password is required` })
+      return
+    }
+    if (!validate.validatePassword(password)) {
+      res.status(400).send({ status: false, message: 'password should be between 8 and 15 characters' })
+      return
+    }
+    
+    if(address){
+      if (!validate.isValidRequestBody(address)) {
+        res.status(400).send({ status: false, message: 'Please provide address details' })
+        return
+      }
+      if(address.street){ 
+        if(!(validate.validString(requestBody.address.street))){
+        return res.status(400).send({ status: false, message: `street of address is a string not number` })
+        }
+      }
+      if(address.city){ 
+        if(!(validate.validString(requestBody.address.city))){
+        return res.status(400).send({ status: false, message: `city of address is a string not number` })      
+      }
+    }
+
+      if(address.pincode){ 
+        if(typeof requestBody.address.pincode != 'number')
+        return res.status(400).send({ status: false, message: `pincode of address should be number` })
+      }
+    
+      }
+    const createUserData = await userModel.create(req.body)
+    res.status(201).send({ status: true, msg: "successfully created", data: createUserData })
+
+  } catch (err) {
+    res.status(500).send({ status: false, msg: err.message })
   }
-
-  let userData = req.body;
-  let updatedUser = await userModel.findOneAndUpdate({ _id: userId }, userData);
-  res.send({ status: updatedUser, data: updatedUser });
-};
-
-const postMessage = async function (req, res) {
-    let message = req.body.message
-    // Check if the token is present
-    // Check if the token present is a valid token
-    // Return a different error message in both these cases
-    let token = req.headers["x-auth-token"]
-    if(!token) return res.send({status: false, msg: "token must be present in the request header"})
-    let decodedToken = jwt.verify(token, 'functionup-thorium')
-
-    if(!decodedToken) return res.send({status: false, msg:"token is not valid"})
-    
-    //userId for which the request is made. In this case message to be posted.
-    let userToBeModified = req.params.userId
-    //userId for the logged-in user
-    let userLoggedIn = decodedToken.userId
-
-    //userId comparision to check if the logged-in user is requesting for their own data
-    if(userToBeModified != userLoggedIn) return res.send({status: false, msg: 'User logged is not allowed to modify the requested users data'})
-
-    let user = await userModel.findById(req.params.userId)
-    if(!user) return res.send({status: false, msg: 'No such user exists'})
-    
-    let updatedPosts = user.posts
-    //add the message to user's posts
-    updatedPosts.push(message)
-    let updatedUser = await userModel.findOneAndUpdate({_id: user._id},{posts: updatedPosts}, {new: true})
-
-    //return the updated user document
-    return res.send({status: true, data: updatedUser})
 }
 
-module.exports.createUser = createUser;
-module.exports.getUserData = getUserData;
-module.exports.updateUser = updateUser;
-module.exports.loginUser = loginUser;
-module.exports.postMessage = postMessage
+// api for create login
+
+const loginUser = async function (req, res) {
+  try {
+    const requestBody = req.body;
+
+    if (!validate.isValidRequestBody(requestBody)) {
+      res.status(400).send({ status: false, message: 'Invalid request parameters. Please provide login details' })
+      return
+    }
+
+    const { email, password } = requestBody;
+
+    
+    if (!validate.isValid(email)) {
+      res.status(400).send({ status: false, message: `Email is required` })
+      return
+    }
+
+    if (!validate.validateEmail(email)) {
+      res.status(400).send({ status: false, message: `Email should be a valid email address` })
+      return
+    }
+
+    if (!validate.isValid(password)) {
+      res.status(400).send({ status: false, message: `Password is required` })
+      return
+    }
+    if (!validate.validatePassword(password)) {
+      res.status(400).send({ status: false, message: 'password should be between 8 and 15 characters' })
+      return
+    }
+
+    const user = await userModel.findOne({ email: email, password: password });
+
+    if (!user) {
+      res.status(401).send({ status: false, message: `Invalid login credentials` });
+      return
+    }
+    const token = await jwt.sign({
+      userId: user._id,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 10*60*60
+    }, 'group 10')
+
+    res.header('x-api-key', token);
+    res.status(200).send({ status: true, message: `user login successfull`, data: { token } });
+  }
+   catch (error) {
+    res.status(500).send({ status: false, message: error.message });
+  }
+}
+
+
+module.exports = { createUser, loginUser }
